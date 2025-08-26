@@ -31,10 +31,10 @@ impl Memory {
         }
     }
 
-    pub fn new(program: [u8; _32KB]) -> Memory {
+    pub fn new(rom: [u8; _32KB]) -> Memory {
         Memory {
             // TODO: Should we use Vec<u8> instead of [u8; _32KB]?
-            rom: program,
+            rom,
             vram: [0; _8KB],
             ram: [0; _32KB],
             wram1: [0; _4KB],

@@ -73,8 +73,6 @@ impl Clock {
     }
 }
 
-struct ALU {}
-
 pub struct CPU {
     memory: Memory,
     registers: Registers,
@@ -181,6 +179,18 @@ impl CPU {
         self.clock.cycles += 3;
     }
 
+    fn write_r8_lsb(&mut self, address: u16, reg: Register) {
+        let register = self.registers.from_enum(reg);
+        self.memory.write(address, register.split().0);
+        self.clock.cycles += 2;
+    }
+
+    fn write_r8_msb(&mut self, address: u16, reg: Register) {
+        let register = self.registers.from_enum(reg);
+        self.memory.write(address, register.split().1);
+        self.clock.cycles += 2;
+    }
+
     fn fetch(pc: &mut u16, memory: &Memory) -> u8 {
         let data = memory.read(*pc);
         *pc += 1;
@@ -189,13 +199,12 @@ impl CPU {
 
     fn execute(&mut self, ins: Instruction) {
         match ins {
-            // Control
             Instruction::NOP => self.clock.cycles += 1,
+            Instruction::Invalid => todo!(),
             Instruction::CB => {
                 let next_byte = CPU::fetch(&mut self.registers.pc, &self.memory);
                 self.execute(Instruction::decode_cb(next_byte));
             }
-            // Load 8 bits
             Instruction::LD_A_u8 => self.load_r8_lsb(Register::AF),
             Instruction::LD_B_u8 => self.load_r8_lsb(Register::BC),
             Instruction::LD_C_u8 => self.load_r8_msb(Register::BC),
@@ -203,13 +212,9 @@ impl CPU {
             Instruction::LD_E_u8 => self.load_r8_msb(Register::DE),
             Instruction::LD_H_u8 => self.load_r8_lsb(Register::HL),
             Instruction::LD_L_u8 => self.load_r8_msb(Register::HL),
-
-            // Load 16 bits
             Instruction::LD_BC_u16 => self.load_r16(Register::BC),
             Instruction::LD_DE_u16 => self.load_r16(Register::DE),
             Instruction::LD_HL_u16 => self.load_r16(Register::HL),
-
-            // ALU 8 bits
             Instruction::INC_A => self.inc_r8_lsb(Register::AF),
             Instruction::INC_B => self.inc_r8_lsb(Register::BC),
             Instruction::INC_C => self.inc_r8_msb(Register::BC),
@@ -224,22 +229,108 @@ impl CPU {
             Instruction::DEC_E => self.dec_r8_msb(Register::DE),
             Instruction::DEC_H => self.dec_r8_lsb(Register::HL),
             Instruction::DEC_L => self.dec_r8_msb(Register::HL),
-
-            Instruction::LD_BC_A => {
-                self.memory
-                    .write(self.registers.bc, self.registers.af.split().0);
-                self.clock.cycles += 2;
-            }
-
-            Instruction::LD_DE_A => {
-                self.memory
-                    .write(self.registers.de, self.registers.af.split().0);
-                self.clock.cycles += 2;
-            }
-
-            Instruction::Invalid => {}
-
-            _ => {}
+            Instruction::LD_BC_A => self.write_r8_lsb(self.registers.bc, Register::AF),
+            Instruction::LD_DE_A => self.write_r8_lsb(self.registers.de, Register::AF),
+            Instruction::LD_A_BC => todo!(),
+            Instruction::LD_A_DE => todo!(),
+            Instruction::LD_HL_A_Plus => todo!(),
+            Instruction::LD_HL_A_Minus => todo!(),
+            Instruction::LD_A_HL_Plus => todo!(),
+            Instruction::LD_A_HL_Minus => todo!(),
+            Instruction::LD_HL_u8 => todo!(),
+            Instruction::LD_B_A => todo!(),
+            Instruction::LD_B_B => todo!(),
+            Instruction::LD_B_C => todo!(),
+            Instruction::LD_B_D => todo!(),
+            Instruction::LD_B_E => todo!(),
+            Instruction::LD_B_H => todo!(),
+            Instruction::LD_B_L => todo!(),
+            Instruction::LD_B_HL => todo!(),
+            Instruction::LD_C_A => todo!(),
+            Instruction::LD_C_B => todo!(),
+            Instruction::LD_C_C => todo!(),
+            Instruction::LD_C_D => todo!(),
+            Instruction::LD_C_E => todo!(),
+            Instruction::LD_C_H => todo!(),
+            Instruction::LD_C_L => todo!(),
+            Instruction::LD_C_HL => todo!(),
+            Instruction::LD_D_A => todo!(),
+            Instruction::LD_D_B => todo!(),
+            Instruction::LD_D_C => todo!(),
+            Instruction::LD_D_D => todo!(),
+            Instruction::LD_D_E => todo!(),
+            Instruction::LD_D_H => todo!(),
+            Instruction::LD_D_L => todo!(),
+            Instruction::LD_D_HL => todo!(),
+            Instruction::LD_E_A => todo!(),
+            Instruction::LD_E_B => todo!(),
+            Instruction::LD_E_C => todo!(),
+            Instruction::LD_E_D => todo!(),
+            Instruction::LD_E_E => todo!(),
+            Instruction::LD_E_H => todo!(),
+            Instruction::LD_E_L => todo!(),
+            Instruction::LD_E_HL => todo!(),
+            Instruction::LD_H_A => todo!(),
+            Instruction::LD_H_B => todo!(),
+            Instruction::LD_H_C => todo!(),
+            Instruction::LD_H_D => todo!(),
+            Instruction::LD_H_E => todo!(),
+            Instruction::LD_H_H => todo!(),
+            Instruction::LD_H_L => todo!(),
+            Instruction::LD_H_HL => todo!(),
+            Instruction::LD_L_A => todo!(),
+            Instruction::LD_L_B => todo!(),
+            Instruction::LD_L_C => todo!(),
+            Instruction::LD_L_D => todo!(),
+            Instruction::LD_L_E => todo!(),
+            Instruction::LD_L_H => todo!(),
+            Instruction::LD_L_L => todo!(),
+            Instruction::LD_L_HL => todo!(),
+            Instruction::LD_HL_B => todo!(),
+            Instruction::LD_HL_C => todo!(),
+            Instruction::LD_HL_D => todo!(),
+            Instruction::LD_HL_E => todo!(),
+            Instruction::LD_HL_H => todo!(),
+            Instruction::LD_HL_L => todo!(),
+            Instruction::LD_SP_u16 => todo!(),
+            Instruction::LD_u16_SP => todo!(),
+            Instruction::DAA => todo!(),
+            Instruction::SCF => todo!(),
+            Instruction::CPL => todo!(),
+            Instruction::CCF => todo!(),
+            Instruction::INC_BC => todo!(),
+            Instruction::INC_DE => todo!(),
+            Instruction::INC_HL => todo!(),
+            Instruction::INC_SP => todo!(),
+            Instruction::DEC_BC => todo!(),
+            Instruction::DEC_DE => todo!(),
+            Instruction::DEC_HL => todo!(),
+            Instruction::DEC_SP => todo!(),
+            Instruction::ADD_HL_BC => todo!(),
+            Instruction::ADD_HL_DE => todo!(),
+            Instruction::ADD_HL_HL => todo!(),
+            Instruction::ADD_HL_SP => todo!(),
+            Instruction::RLCA => todo!(),
+            Instruction::RRCA => todo!(),
+            Instruction::RLA => todo!(),
+            Instruction::RRA => todo!(),
+            Instruction::JR_i8 => todo!(),
+            Instruction::JR_NZ_i8 => todo!(),
+            Instruction::JR_NC_i8 => todo!(),
+            Instruction::JR_C_i8 => todo!(),
+            Instruction::JR_Z_i8 => todo!(),
+            Instruction::JP_u16 => todo!(),
+            Instruction::STOP => todo!(),
+            Instruction::HALT => todo!(),
+            Instruction::LD_A_A => todo!(),
+            Instruction::LD_A_B => todo!(),
+            Instruction::LD_A_C => todo!(),
+            Instruction::LD_A_D => todo!(),
+            Instruction::LD_A_E => todo!(),
+            Instruction::LD_A_H => todo!(),
+            Instruction::LD_A_L => todo!(),
+            Instruction::LD_A_HL => todo!(),
+            Instruction::LD_HL_A => todo!(),
         }
     }
 }
