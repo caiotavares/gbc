@@ -144,35 +144,35 @@ impl CPU {
         }
     }
 
-    fn inc_r8(&mut self, reg: Register8bit) {
-        let register = self.registers.as_8bit(&reg);
-        if register == 0xFF {
-            self.registers.set(reg, 0x00);
+    fn inc_r8(&mut self, register: Register8bit) {
+        let data = self.registers.as_8bit(&register);
+        if data == 0xFF {
+            self.registers.set(register, 0x00);
             self.registers
                 .set_flags(Some(true), Some(false), Some(true), None);
         } else {
-            self.registers.set(reg, register + 1);
+            self.registers.set(register, data + 1);
             self.registers.set_flags(None, Some(false), None, None);
         };
         self.clock.cycles += 1;
     }
 
-    fn dec_r8(&mut self, reg: Register8bit) {
-        let register = self.registers.as_8bit(&reg);
-        if register == 0x00 {
-            self.registers.set(reg, 0xFF);
+    fn dec_r8(&mut self, register: Register8bit) {
+        let data = self.registers.as_8bit(&register);
+        if data == 0x00 {
+            self.registers.set(register, 0xFF);
             self.registers
                 .set_flags(Some(true), Some(false), Some(true), None);
         } else {
-            self.registers.set(reg, register - 1);
+            self.registers.set(register, data - 1);
             self.registers.set_flags(None, Some(false), None, None);
         };
         self.clock.cycles += 1;
     }
 
-    fn load_r8_n8(&mut self, reg: Register8bit) {
+    fn load_r8_n8(&mut self, register: Register8bit) {
         let data = CPU::fetch(&mut self.registers.pc, &self.memory);
-        self.registers.set(reg, data);
+        self.registers.set(register, data);
         self.clock.cycles += 2;
     }
 
@@ -182,22 +182,22 @@ impl CPU {
         self.clock.cycles += 2;
     }
 
-    fn load_r16_n16(&mut self, reg: Register16bit) {
+    fn load_r16_n16(&mut self, register: Register16bit) {
         let lsb = CPU::fetch(&mut self.registers.pc, &self.memory);
         let msb = CPU::fetch(&mut self.registers.pc, &self.memory);
-        self.registers.set_16bit(reg, msb, lsb);
+        self.registers.set_16bit(register, msb, lsb);
         self.clock.cycles += 3;
     }
 
-    fn load_r16_a(&mut self, address: Register16bit) {
-        let address = self.registers.as_16bit(&address);
+    fn load_r16_a(&mut self, register: Register16bit) {
+        let address = self.registers.as_16bit(&register);
         let data = self.registers.as_8bit(&Register8bit::A);
         self.memory.write(address, data);
         self.clock.cycles += 2;
     }
 
-    fn load_a_r16(&mut self, address: Register16bit) {
-        let address = self.registers.as_16bit(&address);
+    fn load_a_r16(&mut self, register: Register16bit) {
+        let address = self.registers.as_16bit(&register);
         let data = self.memory.read(address);
         self.registers.set(Register8bit::A, data);
         self.clock.cycles += 2;
