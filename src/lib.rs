@@ -13,9 +13,13 @@ pub const _4KB: usize = 4 * _1KB;
 pub const _2KB: usize = 2 * _1KB;
 pub const _1KB: usize = 1024;
 
-pub fn as_u16(lsb: u8, msb: u8) -> u16 {
+pub fn as_u16(msb: u8, lsb: u8) -> u16 {
     let value: u16 = 0x0000;
     (value | (lsb as u16)) | ((msb as u16) << 8)
+}
+
+pub trait Joinable {
+    fn join(&self) -> u16;
 }
 
 pub trait Splitable {
@@ -30,6 +34,12 @@ impl Splitable for u16 {
     }
 }
 
+impl Joinable for (u8, u8) {
+    fn join(&self) -> u16 {
+        as_u16(self.0, self.1)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -38,7 +48,7 @@ mod tests {
     fn test_as_u16() {
         let lsb: u8 = 0x1F;
         let msb: u8 = 0x25;
-        let word: u16 = as_u16(lsb, msb);
+        let word: u16 = as_u16(msb, lsb);
         assert_eq!(word, 0x251F);
     }
 
@@ -46,7 +56,7 @@ mod tests {
     fn test_split_u16() {
         let lsb: u8 = 0x1F;
         let msb: u8 = 0x25;
-        let word: u16 = as_u16(lsb, msb);
+        let word: u16 = as_u16(msb, lsb);
         assert_eq!((0x1F, 0x25), word.split());
     }
 }

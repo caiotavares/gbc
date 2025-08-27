@@ -4,7 +4,17 @@ use crate::*;
 
 const CLOCK: f32 = 8.388608;
 
-enum Register {
+enum Register8bit {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+}
+
+enum Register16bit {
     AF,
     BC,
     DE,
@@ -15,10 +25,10 @@ enum Register {
 
 #[derive(Debug)]
 struct Registers {
-    af: u16, // Accumulator & Flags register
-    bc: u16,
-    de: u16,
-    hl: u16,
+    af: (u8, u8), // Accumulator & Flags register
+    bc: (u8, u8),
+    de: (u8, u8),
+    hl: (u8, u8),
     sp: u16, // Stack Pointer
     pc: u16, // Program Counter
 }
@@ -27,10 +37,10 @@ impl Registers {
     pub fn init() -> Registers {
         // Initial values for registers obtained from Pandocs
         Registers {
-            af: 0x1180,
-            bc: 0x0000,
-            de: 0xFF56,
-            hl: 0x000D,
+            af: (0x11, 0x80),
+            bc: (0x00, 0x00),
+            de: (0xFF, 0x56),
+            hl: (0x00, 0x0D),
             pc: 0x0100, // ROM data starts at 0x0100, ignoring the bootloader checks
             sp: 0xFFFE,
         }
@@ -43,18 +53,51 @@ impl Registers {
         h: Option<bool>,
         c: Option<bool>,
     ) {
-        let current_state = self.af.split().1;
-        let new_state: u8 = 0x00;
     }
 
-    pub fn from_enum(&mut self, reg: Register) -> &mut u16 {
-        match reg {
-            Register::AF => &mut self.af,
-            Register::BC => &mut self.bc,
-            Register::DE => &mut self.de,
-            Register::HL => &mut self.hl,
-            Register::SP => &mut self.sp,
-            Register::PC => &mut self.pc,
+    pub fn set(&mut self, register: Register8bit, value: u8) {
+        match register {
+            Register8bit::A => self.af.0 = value,
+            Register8bit::B => self.bc.0 = value,
+            Register8bit::C => self.bc.1 = value,
+            Register8bit::D => self.de.0 = value,
+            Register8bit::E => self.de.1 = value,
+            Register8bit::H => self.hl.0 = value,
+            Register8bit::L => self.hl.1 = value,
+        }
+    }
+
+    pub fn set_16bit(&mut self, register: Register16bit, msb: u8, lsb: u8) {
+        match register {
+            Register16bit::AF => self.af = (msb, lsb),
+            Register16bit::BC => self.bc = (msb, lsb),
+            Register16bit::DE => self.de = (msb, lsb),
+            Register16bit::HL => self.hl = (msb, lsb),
+            Register16bit::SP => self.sp = as_u16(msb, lsb),
+            Register16bit::PC => self.pc = as_u16(msb, lsb),
+        }
+    }
+
+    pub fn as_8bit(&mut self, register: &Register8bit) -> u8 {
+        match register {
+            Register8bit::A => self.af.0,
+            Register8bit::B => self.bc.0,
+            Register8bit::C => self.bc.1,
+            Register8bit::D => self.de.0,
+            Register8bit::E => self.de.1,
+            Register8bit::H => self.hl.0,
+            Register8bit::L => self.hl.1,
+        }
+    }
+
+    pub fn as_16bit(&self, register: &Register16bit) -> u16 {
+        match register {
+            Register16bit::AF => self.af.join(),
+            Register16bit::BC => self.bc.join(),
+            Register16bit::DE => self.de.join(),
+            Register16bit::HL => self.hl.join(),
+            Register16bit::SP => self.sp,
+            Register16bit::PC => self.pc,
         }
     }
 }
@@ -101,93 +144,76 @@ impl CPU {
         }
     }
 
-    fn inc_r8_lsb(&mut self, reg: Register) {
-        let register = self.registers.from_enum(reg);
-        let (lsb, msb) = register.split();
-        if lsb == 0xFF {
-            *register = as_u16(0x00, msb);
+    fn inc_r8(&mut self, reg: Register8bit) {
+        let register = self.registers.as_8bit(&reg);
+        if register == 0xFF {
+            self.registers.set(reg, 0x00);
             self.registers
                 .set_flags(Some(true), Some(false), Some(true), None);
         } else {
-            *register = as_u16(lsb + 1, msb);
+            self.registers.set(reg, register + 1);
             self.registers.set_flags(None, Some(false), None, None);
         };
         self.clock.cycles += 1;
     }
 
-    fn inc_r8_msb(&mut self, reg: Register) {
-        let register = self.registers.from_enum(reg);
-        let (lsb, msb) = register.split();
-        if msb == 0xFF {
-            *register = as_u16(lsb, 0x00);
+    fn dec_r8(&mut self, reg: Register8bit) {
+        let register = self.registers.as_8bit(&reg);
+        if register == 0x00 {
+            self.registers.set(reg, 0xFF);
             self.registers
                 .set_flags(Some(true), Some(false), Some(true), None);
         } else {
-            *register = as_u16(lsb, msb + 1);
+            self.registers.set(reg, register - 1);
             self.registers.set_flags(None, Some(false), None, None);
         };
         self.clock.cycles += 1;
     }
 
-    fn dec_r8_lsb(&mut self, reg: Register) {
-        let register = self.registers.from_enum(reg);
-        let (lsb, msb) = register.split();
-        if lsb == 0x00 {
-            *register = as_u16(0xFF, msb);
-            self.registers
-                .set_flags(Some(true), Some(false), Some(true), None);
-        } else {
-            *register = as_u16(lsb - 1, msb);
-            self.registers.set_flags(None, Some(false), None, None);
-        };
-        self.clock.cycles += 1;
-    }
-
-    fn dec_r8_msb(&mut self, reg: Register) {
-        let register = self.registers.from_enum(reg);
-        let (lsb, msb) = register.split();
-        if msb == 0x00 {
-            *register = as_u16(lsb, 0xFF);
-            self.registers
-                .set_flags(Some(true), Some(false), Some(true), None);
-        } else {
-            *register = as_u16(lsb, msb - 1);
-            self.registers.set_flags(None, Some(false), None, None);
-        };
-        self.clock.cycles += 1;
-    }
-
-    fn load_r8_lsb(&mut self, reg: Register) {
+    fn load_r8_n8(&mut self, reg: Register8bit) {
         let data = CPU::fetch(&mut self.registers.pc, &self.memory);
-        let register = self.registers.from_enum(reg);
-        *register = *register | (data as u16);
+        self.registers.set(reg, data);
         self.clock.cycles += 2;
     }
 
-    fn load_r8_msb(&mut self, reg: Register) {
-        let data = CPU::fetch(&mut self.registers.pc, &self.memory);
-        let register = self.registers.from_enum(reg);
-        *register = *register | ((data as u16) << 8);
+    fn load_r8_r8(&mut self, to: Register8bit, from: Register8bit) {
+        let data = self.registers.as_8bit(&from);
+        self.registers.set(to, data);
         self.clock.cycles += 2;
     }
 
-    fn load_r16(&mut self, reg: Register) {
+    fn load_r16_n16(&mut self, reg: Register16bit) {
         let lsb = CPU::fetch(&mut self.registers.pc, &self.memory);
         let msb = CPU::fetch(&mut self.registers.pc, &self.memory);
-        let register = self.registers.from_enum(reg);
-        *register = as_u16(lsb, msb);
+        self.registers.set_16bit(reg, msb, lsb);
         self.clock.cycles += 3;
     }
 
-    fn write_r8_lsb(&mut self, address: u16, reg: Register) {
-        let register = self.registers.from_enum(reg);
-        self.memory.write(address, register.split().0);
+    fn load_r16_a(&mut self, address: Register16bit) {
+        let address = self.registers.as_16bit(&address);
+        let data = self.registers.as_8bit(&Register8bit::A);
+        self.memory.write(address, data);
         self.clock.cycles += 2;
     }
 
-    fn write_r8_msb(&mut self, address: u16, reg: Register) {
-        let register = self.registers.from_enum(reg);
-        self.memory.write(address, register.split().1);
+    fn load_a_r16(&mut self, address: Register16bit) {
+        let address = self.registers.as_16bit(&address);
+        let data = self.memory.read(address);
+        self.registers.set(Register8bit::A, data);
+        self.clock.cycles += 2;
+    }
+
+    fn load_r8_hl(&mut self, register: Register8bit) {
+        let address = self.registers.as_16bit(&Register16bit::HL);
+        let data = self.memory.read(address);
+        self.registers.set(register, data);
+        self.clock.cycles += 2;
+    }
+
+    fn load_hl_r8(&mut self, register: Register8bit) {
+        let address = self.registers.as_16bit(&Register16bit::HL);
+        let data = self.registers.as_8bit(&register);
+        self.memory.write(address, data);
         self.clock.cycles += 2;
     }
 
@@ -205,93 +231,93 @@ impl CPU {
                 let next_byte = CPU::fetch(&mut self.registers.pc, &self.memory);
                 self.execute(Instruction::decode_cb(next_byte));
             }
-            Instruction::LD_A_u8 => self.load_r8_lsb(Register::AF),
-            Instruction::LD_B_u8 => self.load_r8_lsb(Register::BC),
-            Instruction::LD_C_u8 => self.load_r8_msb(Register::BC),
-            Instruction::LD_D_u8 => self.load_r8_lsb(Register::DE),
-            Instruction::LD_E_u8 => self.load_r8_msb(Register::DE),
-            Instruction::LD_H_u8 => self.load_r8_lsb(Register::HL),
-            Instruction::LD_L_u8 => self.load_r8_msb(Register::HL),
-            Instruction::LD_BC_u16 => self.load_r16(Register::BC),
-            Instruction::LD_DE_u16 => self.load_r16(Register::DE),
-            Instruction::LD_HL_u16 => self.load_r16(Register::HL),
-            Instruction::INC_A => self.inc_r8_lsb(Register::AF),
-            Instruction::INC_B => self.inc_r8_lsb(Register::BC),
-            Instruction::INC_C => self.inc_r8_msb(Register::BC),
-            Instruction::INC_D => self.inc_r8_lsb(Register::DE),
-            Instruction::INC_E => self.inc_r8_msb(Register::DE),
-            Instruction::INC_H => self.inc_r8_lsb(Register::HL),
-            Instruction::INC_L => self.inc_r8_msb(Register::HL),
-            Instruction::DEC_A => self.dec_r8_lsb(Register::AF),
-            Instruction::DEC_B => self.dec_r8_lsb(Register::BC),
-            Instruction::DEC_C => self.dec_r8_msb(Register::BC),
-            Instruction::DEC_D => self.dec_r8_lsb(Register::DE),
-            Instruction::DEC_E => self.dec_r8_msb(Register::DE),
-            Instruction::DEC_H => self.dec_r8_lsb(Register::HL),
-            Instruction::DEC_L => self.dec_r8_msb(Register::HL),
-            Instruction::LD_BC_A => self.write_r8_lsb(self.registers.bc, Register::AF),
-            Instruction::LD_DE_A => self.write_r8_lsb(self.registers.de, Register::AF),
-            Instruction::LD_A_BC => todo!(),
-            Instruction::LD_A_DE => todo!(),
+            Instruction::LD_A_u8 => self.load_r8_n8(Register8bit::A),
+            Instruction::LD_B_u8 => self.load_r8_n8(Register8bit::B),
+            Instruction::LD_C_u8 => self.load_r8_n8(Register8bit::C),
+            Instruction::LD_D_u8 => self.load_r8_n8(Register8bit::D),
+            Instruction::LD_E_u8 => self.load_r8_n8(Register8bit::E),
+            Instruction::LD_H_u8 => self.load_r8_n8(Register8bit::H),
+            Instruction::LD_L_u8 => self.load_r8_n8(Register8bit::L),
+            Instruction::LD_BC_u16 => self.load_r16_n16(Register16bit::BC),
+            Instruction::LD_DE_u16 => self.load_r16_n16(Register16bit::DE),
+            Instruction::LD_HL_u16 => self.load_r16_n16(Register16bit::HL),
+            Instruction::INC_A => self.inc_r8(Register8bit::A),
+            Instruction::INC_B => self.inc_r8(Register8bit::B),
+            Instruction::INC_C => self.inc_r8(Register8bit::C),
+            Instruction::INC_D => self.inc_r8(Register8bit::D),
+            Instruction::INC_E => self.inc_r8(Register8bit::E),
+            Instruction::INC_H => self.inc_r8(Register8bit::H),
+            Instruction::INC_L => self.inc_r8(Register8bit::L),
+            Instruction::DEC_A => self.dec_r8(Register8bit::A),
+            Instruction::DEC_B => self.dec_r8(Register8bit::B),
+            Instruction::DEC_C => self.dec_r8(Register8bit::C),
+            Instruction::DEC_D => self.dec_r8(Register8bit::D),
+            Instruction::DEC_E => self.dec_r8(Register8bit::E),
+            Instruction::DEC_H => self.dec_r8(Register8bit::H),
+            Instruction::DEC_L => self.dec_r8(Register8bit::L),
+            Instruction::LD_BC_A => self.load_r16_a(Register16bit::BC),
+            Instruction::LD_DE_A => self.load_r16_a(Register16bit::DE),
+            Instruction::LD_A_BC => self.load_a_r16(Register16bit::BC),
+            Instruction::LD_A_DE => self.load_a_r16(Register16bit::DE),
             Instruction::LD_HL_A_Plus => todo!(),
             Instruction::LD_HL_A_Minus => todo!(),
             Instruction::LD_A_HL_Plus => todo!(),
             Instruction::LD_A_HL_Minus => todo!(),
             Instruction::LD_HL_u8 => todo!(),
-            Instruction::LD_B_A => todo!(),
-            Instruction::LD_B_B => todo!(),
-            Instruction::LD_B_C => todo!(),
-            Instruction::LD_B_D => todo!(),
-            Instruction::LD_B_E => todo!(),
-            Instruction::LD_B_H => todo!(),
-            Instruction::LD_B_L => todo!(),
-            Instruction::LD_B_HL => todo!(),
-            Instruction::LD_C_A => todo!(),
-            Instruction::LD_C_B => todo!(),
-            Instruction::LD_C_C => todo!(),
-            Instruction::LD_C_D => todo!(),
-            Instruction::LD_C_E => todo!(),
-            Instruction::LD_C_H => todo!(),
-            Instruction::LD_C_L => todo!(),
-            Instruction::LD_C_HL => todo!(),
-            Instruction::LD_D_A => todo!(),
-            Instruction::LD_D_B => todo!(),
-            Instruction::LD_D_C => todo!(),
-            Instruction::LD_D_D => todo!(),
-            Instruction::LD_D_E => todo!(),
-            Instruction::LD_D_H => todo!(),
-            Instruction::LD_D_L => todo!(),
-            Instruction::LD_D_HL => todo!(),
-            Instruction::LD_E_A => todo!(),
-            Instruction::LD_E_B => todo!(),
-            Instruction::LD_E_C => todo!(),
-            Instruction::LD_E_D => todo!(),
-            Instruction::LD_E_E => todo!(),
-            Instruction::LD_E_H => todo!(),
-            Instruction::LD_E_L => todo!(),
-            Instruction::LD_E_HL => todo!(),
-            Instruction::LD_H_A => todo!(),
-            Instruction::LD_H_B => todo!(),
-            Instruction::LD_H_C => todo!(),
-            Instruction::LD_H_D => todo!(),
-            Instruction::LD_H_E => todo!(),
-            Instruction::LD_H_H => todo!(),
-            Instruction::LD_H_L => todo!(),
-            Instruction::LD_H_HL => todo!(),
-            Instruction::LD_L_A => todo!(),
-            Instruction::LD_L_B => todo!(),
-            Instruction::LD_L_C => todo!(),
-            Instruction::LD_L_D => todo!(),
-            Instruction::LD_L_E => todo!(),
-            Instruction::LD_L_H => todo!(),
-            Instruction::LD_L_L => todo!(),
-            Instruction::LD_L_HL => todo!(),
-            Instruction::LD_HL_B => todo!(),
-            Instruction::LD_HL_C => todo!(),
-            Instruction::LD_HL_D => todo!(),
-            Instruction::LD_HL_E => todo!(),
-            Instruction::LD_HL_H => todo!(),
-            Instruction::LD_HL_L => todo!(),
+            Instruction::LD_B_A => self.load_r8_r8(Register8bit::B, Register8bit::A),
+            Instruction::LD_B_B => self.load_r8_r8(Register8bit::B, Register8bit::B),
+            Instruction::LD_B_C => self.load_r8_r8(Register8bit::B, Register8bit::C),
+            Instruction::LD_B_D => self.load_r8_r8(Register8bit::B, Register8bit::D),
+            Instruction::LD_B_E => self.load_r8_r8(Register8bit::B, Register8bit::E),
+            Instruction::LD_B_H => self.load_r8_r8(Register8bit::B, Register8bit::H),
+            Instruction::LD_B_L => self.load_r8_r8(Register8bit::B, Register8bit::L),
+            Instruction::LD_B_HL => self.load_r8_hl(Register8bit::B),
+            Instruction::LD_C_A => self.load_r8_r8(Register8bit::C, Register8bit::A),
+            Instruction::LD_C_B => self.load_r8_r8(Register8bit::C, Register8bit::B),
+            Instruction::LD_C_C => self.load_r8_r8(Register8bit::C, Register8bit::C),
+            Instruction::LD_C_D => self.load_r8_r8(Register8bit::C, Register8bit::D),
+            Instruction::LD_C_E => self.load_r8_r8(Register8bit::C, Register8bit::E),
+            Instruction::LD_C_H => self.load_r8_r8(Register8bit::C, Register8bit::H),
+            Instruction::LD_C_L => self.load_r8_r8(Register8bit::C, Register8bit::L),
+            Instruction::LD_C_HL => self.load_r8_hl(Register8bit::C),
+            Instruction::LD_D_A => self.load_r8_r8(Register8bit::D, Register8bit::A),
+            Instruction::LD_D_B => self.load_r8_r8(Register8bit::D, Register8bit::B),
+            Instruction::LD_D_C => self.load_r8_r8(Register8bit::D, Register8bit::C),
+            Instruction::LD_D_D => self.load_r8_r8(Register8bit::D, Register8bit::D),
+            Instruction::LD_D_E => self.load_r8_r8(Register8bit::D, Register8bit::E),
+            Instruction::LD_D_H => self.load_r8_r8(Register8bit::D, Register8bit::H),
+            Instruction::LD_D_L => self.load_r8_r8(Register8bit::D, Register8bit::L),
+            Instruction::LD_D_HL => self.load_r8_hl(Register8bit::D),
+            Instruction::LD_E_A => self.load_r8_r8(Register8bit::E, Register8bit::A),
+            Instruction::LD_E_B => self.load_r8_r8(Register8bit::E, Register8bit::B),
+            Instruction::LD_E_C => self.load_r8_r8(Register8bit::E, Register8bit::C),
+            Instruction::LD_E_D => self.load_r8_r8(Register8bit::E, Register8bit::D),
+            Instruction::LD_E_E => self.load_r8_r8(Register8bit::E, Register8bit::E),
+            Instruction::LD_E_H => self.load_r8_r8(Register8bit::E, Register8bit::H),
+            Instruction::LD_E_L => self.load_r8_r8(Register8bit::E, Register8bit::L),
+            Instruction::LD_E_HL => self.load_r8_hl(Register8bit::E),
+            Instruction::LD_H_A => self.load_r8_r8(Register8bit::H, Register8bit::A),
+            Instruction::LD_H_B => self.load_r8_r8(Register8bit::H, Register8bit::B),
+            Instruction::LD_H_C => self.load_r8_r8(Register8bit::H, Register8bit::C),
+            Instruction::LD_H_D => self.load_r8_r8(Register8bit::H, Register8bit::D),
+            Instruction::LD_H_E => self.load_r8_r8(Register8bit::H, Register8bit::E),
+            Instruction::LD_H_H => self.load_r8_r8(Register8bit::H, Register8bit::H),
+            Instruction::LD_H_L => self.load_r8_r8(Register8bit::H, Register8bit::L),
+            Instruction::LD_H_HL => self.load_r8_hl(Register8bit::H),
+            Instruction::LD_L_A => self.load_r8_r8(Register8bit::L, Register8bit::A),
+            Instruction::LD_L_B => self.load_r8_r8(Register8bit::L, Register8bit::B),
+            Instruction::LD_L_C => self.load_r8_r8(Register8bit::L, Register8bit::C),
+            Instruction::LD_L_D => self.load_r8_r8(Register8bit::L, Register8bit::D),
+            Instruction::LD_L_E => self.load_r8_r8(Register8bit::L, Register8bit::E),
+            Instruction::LD_L_H => self.load_r8_r8(Register8bit::L, Register8bit::H),
+            Instruction::LD_L_L => self.load_r8_r8(Register8bit::L, Register8bit::L),
+            Instruction::LD_L_HL => self.load_r8_hl(Register8bit::L),
+            Instruction::LD_HL_B => self.load_hl_r8(Register8bit::B),
+            Instruction::LD_HL_C => self.load_hl_r8(Register8bit::C),
+            Instruction::LD_HL_D => self.load_hl_r8(Register8bit::D),
+            Instruction::LD_HL_E => self.load_hl_r8(Register8bit::E),
+            Instruction::LD_HL_H => self.load_hl_r8(Register8bit::H),
+            Instruction::LD_HL_L => self.load_hl_r8(Register8bit::L),
             Instruction::LD_SP_u16 => todo!(),
             Instruction::LD_u16_SP => todo!(),
             Instruction::DAA => todo!(),
@@ -322,15 +348,15 @@ impl CPU {
             Instruction::JP_u16 => todo!(),
             Instruction::STOP => todo!(),
             Instruction::HALT => todo!(),
-            Instruction::LD_A_A => todo!(),
-            Instruction::LD_A_B => todo!(),
-            Instruction::LD_A_C => todo!(),
-            Instruction::LD_A_D => todo!(),
-            Instruction::LD_A_E => todo!(),
-            Instruction::LD_A_H => todo!(),
-            Instruction::LD_A_L => todo!(),
-            Instruction::LD_A_HL => todo!(),
-            Instruction::LD_HL_A => todo!(),
+            Instruction::LD_A_A => self.load_r8_r8(Register8bit::A, Register8bit::A),
+            Instruction::LD_A_B => self.load_r8_r8(Register8bit::A, Register8bit::B),
+            Instruction::LD_A_C => self.load_r8_r8(Register8bit::A, Register8bit::C),
+            Instruction::LD_A_D => self.load_r8_r8(Register8bit::A, Register8bit::D),
+            Instruction::LD_A_E => self.load_r8_r8(Register8bit::A, Register8bit::E),
+            Instruction::LD_A_H => self.load_r8_r8(Register8bit::A, Register8bit::H),
+            Instruction::LD_A_L => self.load_r8_r8(Register8bit::A, Register8bit::L),
+            Instruction::LD_A_HL => self.load_r8_hl(Register8bit::A),
+            Instruction::LD_HL_A => self.load_hl_r8(Register8bit::A),
         }
     }
 }
@@ -347,10 +373,10 @@ mod tests {
                 clock_speed: 0,
             },
             registers: Registers {
-                af: 0x0000,
-                bc: 0x0000,
-                de: 0x0000,
-                hl: 0x0000,
+                af: (0x00, 0x00),
+                bc: (0x00, 0x00),
+                de: (0x00, 0x00),
+                hl: (0x00, 0x00),
                 sp: 0x0000,
                 pc: 0x0000,
             },
@@ -360,50 +386,69 @@ mod tests {
     #[test]
     fn test_alu_r8() {
         let mut cpu = new_test_cpu();
-        assert_eq!(cpu.registers.bc, 0x0000);
-        cpu.inc_r8_lsb(Register::BC);
-        assert_eq!(cpu.registers.bc, 0x0001);
-        cpu.inc_r8_msb(Register::BC);
-        assert_eq!(cpu.registers.bc, 0x0101);
-        cpu.dec_r8_msb(Register::BC);
-        assert_eq!(cpu.registers.bc, 0x0001);
-        cpu.dec_r8_lsb(Register::BC);
-        assert_eq!(cpu.registers.bc, 0x0000);
+        assert_eq!(cpu.registers.bc, (0x00, 0x00));
+        cpu.inc_r8(Register8bit::B);
+        assert_eq!(cpu.registers.bc, (0x01, 0x00));
+        cpu.inc_r8(Register8bit::C);
+        assert_eq!(cpu.registers.bc, (0x01, 0x01));
+        cpu.dec_r8(Register8bit::B);
+        assert_eq!(cpu.registers.bc, (0x00, 0x01));
+        cpu.dec_r8(Register8bit::C);
+        assert_eq!(cpu.registers.bc, (0x00, 0x00));
     }
 
     // TODO: Assert flags being set
     #[test]
     fn test_alu_r8_overflow() {
         let mut cpu = new_test_cpu();
-        let bc = cpu.registers.from_enum(Register::BC);
-        *bc = 0xFFFF;
-        assert_eq!(cpu.registers.bc, 0xFFFF);
-        cpu.inc_r8_lsb(Register::BC);
-        assert_eq!(cpu.registers.bc, 0xFF00);
-        cpu.inc_r8_msb(Register::BC);
-        assert_eq!(cpu.registers.bc, 0x0000);
-        cpu.dec_r8_lsb(Register::BC);
-        assert_eq!(cpu.registers.bc, 0x00FF);
-        cpu.dec_r8_msb(Register::BC);
-        assert_eq!(cpu.registers.bc, 0xFFFF);
+        cpu.registers.set_16bit(Register16bit::BC, 0xFF, 0xFF);
+        assert_eq!(cpu.registers.bc, (0xFF, 0xFF));
+        cpu.inc_r8(Register8bit::C);
+        assert_eq!(cpu.registers.bc, (0xFF, 0x00));
+        cpu.inc_r8(Register8bit::B);
+        assert_eq!(cpu.registers.bc, (0x00, 0x00));
+        cpu.dec_r8(Register8bit::B);
+        assert_eq!(cpu.registers.bc, (0xFF, 0x00));
+        cpu.dec_r8(Register8bit::C);
+        assert_eq!(cpu.registers.bc, (0xFF, 0xFF));
     }
 
     #[test]
-    fn test_from_enum() {
+    fn test_as8bit() {
         let mut cpu = new_test_cpu();
         cpu.registers = Registers {
-            af: 0x0001,
-            bc: 0x0002,
-            de: 0x0003,
-            hl: 0x0004,
-            sp: 0x0005,
-            pc: 0x0006,
+            af: (0x01, 0x08),
+            bc: (0x02, 0x03),
+            de: (0x04, 0x05),
+            hl: (0x06, 0x07),
+            sp: 0x0000,
+            pc: 0x0000,
         };
-        assert_eq!(*cpu.registers.from_enum(Register::AF), 0x0001);
-        assert_eq!(*cpu.registers.from_enum(Register::BC), 0x0002);
-        assert_eq!(*cpu.registers.from_enum(Register::DE), 0x0003);
-        assert_eq!(*cpu.registers.from_enum(Register::HL), 0x0004);
-        assert_eq!(*cpu.registers.from_enum(Register::SP), 0x0005);
-        assert_eq!(*cpu.registers.from_enum(Register::PC), 0x0006);
+        assert_eq!(cpu.registers.as_8bit(&Register8bit::A), 0x01);
+        assert_eq!(cpu.registers.as_8bit(&Register8bit::B), 0x02);
+        assert_eq!(cpu.registers.as_8bit(&Register8bit::C), 0x03);
+        assert_eq!(cpu.registers.as_8bit(&Register8bit::D), 0x04);
+        assert_eq!(cpu.registers.as_8bit(&Register8bit::E), 0x05);
+        assert_eq!(cpu.registers.as_8bit(&Register8bit::H), 0x06);
+        assert_eq!(cpu.registers.as_8bit(&Register8bit::L), 0x07);
+    }
+
+    #[test]
+    fn test_as16bit() {
+        let mut cpu = new_test_cpu();
+        cpu.registers = Registers {
+            af: (0x01, 0x08),
+            bc: (0x02, 0x03),
+            de: (0x04, 0x05),
+            hl: (0x06, 0x07),
+            sp: 0x1234,
+            pc: 0x5678,
+        };
+        assert_eq!(cpu.registers.as_16bit(&Register16bit::AF), 0x0108);
+        assert_eq!(cpu.registers.as_16bit(&Register16bit::BC), 0x0203);
+        assert_eq!(cpu.registers.as_16bit(&Register16bit::DE), 0x0405);
+        assert_eq!(cpu.registers.as_16bit(&Register16bit::HL), 0x0607);
+        assert_eq!(cpu.registers.as_16bit(&Register16bit::SP), 0x1234);
+        assert_eq!(cpu.registers.as_16bit(&Register16bit::PC), 0x5678);
     }
 }
