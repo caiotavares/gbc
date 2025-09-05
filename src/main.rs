@@ -3,8 +3,8 @@ use gbc::memory::Memory;
 use gbc::_32KB;
 use std::fs;
 
-fn read_program() -> [u8; _32KB] {
-    let program = fs::read("./tests/fixtures/program.bin").expect("Program is unreadable");
+fn read_rom() -> [u8; _32KB] {
+    let program = fs::read("./test/fixtures/program.bin").expect("Program is unreadable");
     let size: usize = program.len();
     if size > _32KB {
         panic!("Program is too large, maximum size is {} bytes", _32KB);
@@ -15,8 +15,8 @@ fn read_program() -> [u8; _32KB] {
 }
 
 fn main() {
-    let program: [u8; _32KB] = read_program();
-    let memory = Memory::new(program);
+    let rom: [u8; _32KB] = read_rom();
+    let memory = Memory::new(rom);
     let mut cpu = CPU::new(memory);
     cpu.init();
 }
