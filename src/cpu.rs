@@ -1,4 +1,5 @@
-use crate::instructions::Instruction;
+use crate::instruction::extended::ExtendedInstruction;
+use crate::instruction::regular::Instruction;
 use crate::memory::Memory;
 use crate::*;
 
@@ -308,6 +309,12 @@ impl CPU {
         self.clock.cycles += 1;
     }
 
+    fn extended(&mut self) {
+        let data = CPU::fetch(&mut self.registers.pc, &self.memory);
+        let instruction = ExtendedInstruction::decode(data);
+        self.execute_extended(instruction);
+    }
+
     fn fetch(pc: &mut u16, memory: &Memory) -> u8 {
         let data = memory.read(*pc);
         *pc += 1;
@@ -317,11 +324,8 @@ impl CPU {
     fn execute(&mut self, ins: Instruction) {
         match ins {
             Instruction::NOP => self.clock.cycles += 1,
-            Instruction::Invalid => todo!(),
-            Instruction::CB => {
-                let instruction = CPU::fetch(&mut self.registers.pc, &self.memory);
-                self.execute(Instruction::decode_cb(instruction));
-            }
+            Instruction::Invalid => {}
+            Instruction::CB => self.extended(),
             Instruction::LD_A_u8 => self.load_r8_n8(Register8bit::A),
             Instruction::LD_B_u8 => self.load_r8_n8(Register8bit::B),
             Instruction::LD_C_u8 => self.load_r8_n8(Register8bit::C),
@@ -512,6 +516,75 @@ impl CPU {
             Instruction::CP_A_H => todo!(),
             Instruction::CP_A_L => todo!(),
             Instruction::CP_A_HL => todo!(),
+        }
+    }
+
+    fn execute_extended(&mut self, ins: ExtendedInstruction) {
+        match ins {
+            ExtendedInstruction::RLC_A => todo!(),
+            ExtendedInstruction::RLC_B => todo!(),
+            ExtendedInstruction::RLC_C => todo!(),
+            ExtendedInstruction::RLC_D => todo!(),
+            ExtendedInstruction::RLC_E => todo!(),
+            ExtendedInstruction::RLC_H => todo!(),
+            ExtendedInstruction::RLC_L => todo!(),
+            ExtendedInstruction::RLC_HL => todo!(),
+            ExtendedInstruction::RRC_A => todo!(),
+            ExtendedInstruction::RRC_B => todo!(),
+            ExtendedInstruction::RRC_C => todo!(),
+            ExtendedInstruction::RRC_D => todo!(),
+            ExtendedInstruction::RRC_E => todo!(),
+            ExtendedInstruction::RRC_H => todo!(),
+            ExtendedInstruction::RRC_L => todo!(),
+            ExtendedInstruction::RRC_HL => todo!(),
+            ExtendedInstruction::RL_A => todo!(),
+            ExtendedInstruction::RL_B => todo!(),
+            ExtendedInstruction::RL_C => todo!(),
+            ExtendedInstruction::RL_D => todo!(),
+            ExtendedInstruction::RL_E => todo!(),
+            ExtendedInstruction::RL_H => todo!(),
+            ExtendedInstruction::RL_L => todo!(),
+            ExtendedInstruction::RL_HL => todo!(),
+            ExtendedInstruction::RR_A => todo!(),
+            ExtendedInstruction::RR_B => todo!(),
+            ExtendedInstruction::RR_C => todo!(),
+            ExtendedInstruction::RR_D => todo!(),
+            ExtendedInstruction::RR_E => todo!(),
+            ExtendedInstruction::RR_H => todo!(),
+            ExtendedInstruction::RR_L => todo!(),
+            ExtendedInstruction::RR_HL => todo!(),
+            ExtendedInstruction::SLA_A => todo!(),
+            ExtendedInstruction::SLA_B => todo!(),
+            ExtendedInstruction::SLA_C => todo!(),
+            ExtendedInstruction::SLA_D => todo!(),
+            ExtendedInstruction::SLA_E => todo!(),
+            ExtendedInstruction::SLA_H => todo!(),
+            ExtendedInstruction::SLA_L => todo!(),
+            ExtendedInstruction::SLA_HL => todo!(),
+            ExtendedInstruction::SRA_A => todo!(),
+            ExtendedInstruction::SRA_B => todo!(),
+            ExtendedInstruction::SRA_C => todo!(),
+            ExtendedInstruction::SRA_D => todo!(),
+            ExtendedInstruction::SRA_E => todo!(),
+            ExtendedInstruction::SRA_H => todo!(),
+            ExtendedInstruction::SRA_L => todo!(),
+            ExtendedInstruction::SRA_HL => todo!(),
+            ExtendedInstruction::SWAP_A => todo!(),
+            ExtendedInstruction::SWAP_B => todo!(),
+            ExtendedInstruction::SWAP_C => todo!(),
+            ExtendedInstruction::SWAP_D => todo!(),
+            ExtendedInstruction::SWAP_E => todo!(),
+            ExtendedInstruction::SWAP_H => todo!(),
+            ExtendedInstruction::SWAP_L => todo!(),
+            ExtendedInstruction::SWAP_HL => todo!(),
+            ExtendedInstruction::SRL_A => todo!(),
+            ExtendedInstruction::SRL_B => todo!(),
+            ExtendedInstruction::SRL_C => todo!(),
+            ExtendedInstruction::SRL_D => todo!(),
+            ExtendedInstruction::SRL_E => todo!(),
+            ExtendedInstruction::SRL_H => todo!(),
+            ExtendedInstruction::SRL_L => todo!(),
+            ExtendedInstruction::SRL_HL => todo!(),
         }
     }
 }
