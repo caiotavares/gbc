@@ -5,6 +5,13 @@ use crate::*;
 
 const CLOCK: f32 = 8.388608;
 
+enum Flag {
+    Z,
+    N,
+    H,
+    C,
+}
+
 enum Register8bit {
     A,
     B,
@@ -54,6 +61,16 @@ impl Registers {
         h: Option<bool>,
         c: Option<bool>,
     ) {
+    }
+
+    pub fn get_flag(&self, flag: Flag) -> u8 {
+        let register = self.af.1;
+        match flag {
+            Flag::Z => register & 0x80,
+            Flag::N => register & 0x40,
+            Flag::H => register & 0x20,
+            Flag::C => register & 0x10,
+        }
     }
 
     pub fn set(&mut self, register: Register8bit, value: u8) {
@@ -235,6 +252,18 @@ impl CPU {
         self.clock.cycles += 1;
     }
 
+    fn adc_a_r8(&mut self, register: Register8bit) {
+        // TODO: Set carry and half-carry
+        let a = self.registers.as_8bit(&Register8bit::A);
+        let r8 = self.registers.as_8bit(&register);
+        let carry = self.registers.get_flag(Flag::C);
+        let value = a + r8 + carry;
+        self.registers.set(Register8bit::A, value);
+        self.registers
+            .set_flags(Some(value == 0), Some(false), Some(true), Some(false));
+        self.clock.cycles += 1;
+    }
+
     fn sub_a_r8(&mut self, register: Register8bit) {
         let a = self.registers.as_8bit(&Register8bit::A);
         let r8 = self.registers.as_8bit(&register);
@@ -307,6 +336,29 @@ impl CPU {
         let value = a ^ data;
         self.registers.set(Register8bit::A, value);
         self.clock.cycles += 1;
+    }
+
+    fn cp_a_r8(&mut self, register: Register8bit) {
+        let a = self.registers.as_8bit(&Register8bit::A);
+        let r8 = self.registers.as_8bit(&register);
+        let zero = a == r8;
+        let carry = a < r8;
+        let half_carry = a.low_nibble() < r8.low_nibble();
+        self.registers
+            .set_flags(Some(zero), Some(true), Some(half_carry), Some(carry));
+        self.clock.cycles += 1;
+    }
+
+    fn cp_a_hl(&mut self) {
+        let a = self.registers.as_8bit(&Register8bit::A);
+        let address = self.registers.as_16bit(&Register16bit::HL);
+        let data = self.memory.read(address);
+        let zero = a == data;
+        let carry = a < data;
+        let half_carry = a.low_nibble() < data.low_nibble();
+        self.registers
+            .set_flags(Some(zero), Some(true), Some(half_carry), Some(carry));
+        self.clock.cycles += 2;
     }
 
     fn extended(&mut self) {
@@ -460,13 +512,13 @@ impl CPU {
             Instruction::ADD_A_H => self.add_a_r8(Register8bit::H),
             Instruction::ADD_A_L => self.add_a_r8(Register8bit::L),
             Instruction::ADD_A_HL => self.add_a_hl(),
-            Instruction::ADC_A_A => todo!(),
-            Instruction::ADC_A_B => todo!(),
-            Instruction::ADC_A_C => todo!(),
-            Instruction::ADC_A_D => todo!(),
-            Instruction::ADC_A_E => todo!(),
-            Instruction::ADC_A_H => todo!(),
-            Instruction::ADC_A_L => todo!(),
+            Instruction::ADC_A_A => self.adc_a_r8(Register8bit::A),
+            Instruction::ADC_A_B => self.adc_a_r8(Register8bit::B),
+            Instruction::ADC_A_C => self.adc_a_r8(Register8bit::C),
+            Instruction::ADC_A_D => self.adc_a_r8(Register8bit::D),
+            Instruction::ADC_A_E => self.adc_a_r8(Register8bit::E),
+            Instruction::ADC_A_H => self.adc_a_r8(Register8bit::H),
+            Instruction::ADC_A_L => self.adc_a_r8(Register8bit::L),
             Instruction::ADC_A_HL => todo!(),
             Instruction::SUB_A_A => self.sub_a_r8(Register8bit::A),
             Instruction::SUB_A_B => self.sub_a_r8(Register8bit::B),
@@ -508,14 +560,14 @@ impl CPU {
             Instruction::OR_A_H => self.or_a_r8(Register8bit::H),
             Instruction::OR_A_L => self.or_a_r8(Register8bit::L),
             Instruction::OR_A_HL => self.or_a_hl(),
-            Instruction::CP_A_A => todo!(),
-            Instruction::CP_A_B => todo!(),
-            Instruction::CP_A_C => todo!(),
-            Instruction::CP_A_D => todo!(),
-            Instruction::CP_A_E => todo!(),
-            Instruction::CP_A_H => todo!(),
-            Instruction::CP_A_L => todo!(),
-            Instruction::CP_A_HL => todo!(),
+            Instruction::CP_A_A => self.cp_a_r8(Register8bit::A),
+            Instruction::CP_A_B => self.cp_a_r8(Register8bit::B),
+            Instruction::CP_A_C => self.cp_a_r8(Register8bit::C),
+            Instruction::CP_A_D => self.cp_a_r8(Register8bit::D),
+            Instruction::CP_A_E => self.cp_a_r8(Register8bit::E),
+            Instruction::CP_A_H => self.cp_a_r8(Register8bit::H),
+            Instruction::CP_A_L => self.cp_a_r8(Register8bit::L),
+            Instruction::CP_A_HL => self.cp_a_hl(),
         }
     }
 

@@ -18,12 +18,27 @@ pub fn as_u16(msb: u8, lsb: u8) -> u16 {
     (value | (lsb as u16)) | ((msb as u16) << 8)
 }
 
+pub trait Nibble {
+    fn low_nibble(&self) -> u8;
+    fn high_nibble(&self) -> u8;
+}
+
 pub trait Joinable {
     fn join(&self) -> u16;
 }
 
 pub trait Splitable {
     fn split(&self) -> (u8, u8);
+}
+
+impl Nibble for u8 {
+    fn low_nibble(&self) -> u8 {
+        self & 0xF
+    }
+
+    fn high_nibble(&self) -> u8 {
+        self & 0xF0
+    }
 }
 
 impl Splitable for u16 {
