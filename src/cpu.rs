@@ -5,6 +5,16 @@ use crate::*;
 
 const CLOCK: f32 = 8.388608;
 
+struct ALU {}
+
+impl ALU {
+    fn sub(from: u8, take: u8) -> (u8, bool, bool) {
+        let half_carry = from.low_nibble() < take.low_nibble();
+        let (value, carry) = from.overflowing_sub(take);
+        (value, half_carry, carry)
+    }
+}
+
 enum Flag {
     Z,
     N,
@@ -14,6 +24,7 @@ enum Flag {
 
 enum Register8bit {
     A,
+    F,
     B,
     C,
     D,
@@ -54,16 +65,35 @@ impl Registers {
         }
     }
 
-    pub fn set_flags(
-        &mut self,
-        z: Option<bool>,
-        n: Option<bool>,
-        h: Option<bool>,
-        c: Option<bool>,
-    ) {
+    fn set_flags(&mut self, z: Option<bool>, n: Option<bool>, h: Option<bool>, c: Option<bool>) {
+        match z {
+            Some(value) => self.set_flag(Flag::Z, value.into()),
+            None => {}
+        }
+        match n {
+            Some(value) => self.set_flag(Flag::N, value.into()),
+            None => {}
+        }
+        match h {
+            Some(value) => self.set_flag(Flag::H, value.into()),
+            None => {}
+        }
+        match c {
+            Some(value) => self.set_flag(Flag::C, value.into()),
+            None => {}
+        }
     }
 
-    pub fn get_flag(&self, flag: Flag) -> u8 {
+    fn set_flag(&mut self, flag: Flag, value: u8) {
+        match flag {
+            Flag::Z => self.set(Register8bit::F, value & 0x80),
+            Flag::N => self.set(Register8bit::F, value & 0x40),
+            Flag::H => self.set(Register8bit::F, value & 0x20),
+            Flag::C => self.set(Register8bit::F, value & 0x10),
+        }
+    }
+
+    fn get_flag(&self, flag: Flag) -> u8 {
         let register = self.af.1;
         match flag {
             Flag::Z => register & 0x80,
@@ -73,9 +103,10 @@ impl Registers {
         }
     }
 
-    pub fn set(&mut self, register: Register8bit, value: u8) {
+    fn set(&mut self, register: Register8bit, value: u8) {
         match register {
             Register8bit::A => self.af.0 = value,
+            Register8bit::F => self.af.1 = value,
             Register8bit::B => self.bc.0 = value,
             Register8bit::C => self.bc.1 = value,
             Register8bit::D => self.de.0 = value,
@@ -85,7 +116,7 @@ impl Registers {
         }
     }
 
-    pub fn set_16bit(&mut self, register: Register16bit, msb: u8, lsb: u8) {
+    fn set_16bit(&mut self, register: Register16bit, msb: u8, lsb: u8) {
         match register {
             Register16bit::AF => self.af = (msb, lsb),
             Register16bit::BC => self.bc = (msb, lsb),
@@ -96,9 +127,10 @@ impl Registers {
         }
     }
 
-    pub fn as_8bit(&mut self, register: &Register8bit) -> u8 {
+    fn as_8bit(&mut self, register: &Register8bit) -> u8 {
         match register {
             Register8bit::A => self.af.0,
+            Register8bit::F => self.af.1,
             Register8bit::B => self.bc.0,
             Register8bit::C => self.bc.1,
             Register8bit::D => self.de.0,
@@ -108,7 +140,7 @@ impl Registers {
         }
     }
 
-    pub fn as_16bit(&self, register: &Register16bit) -> u16 {
+    fn as_16bit(&self, register: &Register16bit) -> u16 {
         match register {
             Register16bit::AF => self.af.join(),
             Register16bit::BC => self.bc.join(),
@@ -253,22 +285,25 @@ impl CPU {
     }
 
     fn adc_a_r8(&mut self, register: Register8bit) {
-        // TODO: Set carry and half-carry
         let a = self.registers.as_8bit(&Register8bit::A);
         let r8 = self.registers.as_8bit(&register);
-        let carry = self.registers.get_flag(Flag::C);
-        let value = a + r8 + carry;
+        let carry_in = self.registers.get_flag(Flag::C);
+        let (value, carry_1) = a.overflowing_add(r8);
+        let (value, carry_2) = value.overflowing_add(carry_in);
+        let carry_out = carry_1 || carry_2;
         self.registers.set(Register8bit::A, value);
         self.registers
-            .set_flags(Some(value == 0), Some(false), Some(true), Some(false));
+            .set_flags(Some(value == 0), Some(false), Some(true), Some(carry_out));
         self.clock.cycles += 1;
     }
 
     fn sub_a_r8(&mut self, register: Register8bit) {
         let a = self.registers.as_8bit(&Register8bit::A);
         let r8 = self.registers.as_8bit(&register);
-        let value = a - r8;
+        let (value, half_carry, carry) = ALU::sub(a, r8);
         self.registers.set(Register8bit::A, value);
+        self.registers
+            .set_flags(Some(value == 0), Some(true), Some(half_carry), Some(carry));
         self.clock.cycles += 1;
     }
 
@@ -276,8 +311,11 @@ impl CPU {
         let a = self.registers.as_8bit(&Register8bit::A);
         let address = self.registers.as_16bit(&Register16bit::HL);
         let data = self.memory.read(address);
-        let value = a - data;
+        let (value, carry) = a.overflowing_sub(data);
+        let half_carry = a.low_nibble() < data.low_nibble();
         self.registers.set(Register8bit::A, value);
+        self.registers
+            .set_flags(Some(value == 0), Some(true), Some(half_carry), Some(carry));
         self.clock.cycles += 1;
     }
 
@@ -730,5 +768,13 @@ mod tests {
         assert_eq!(cpu.registers.as_16bit(&Register16bit::HL), 0x0607);
         assert_eq!(cpu.registers.as_16bit(&Register16bit::SP), 0x1234);
         assert_eq!(cpu.registers.as_16bit(&Register16bit::PC), 0x5678);
+    }
+
+    #[test]
+    fn test_adc() {
+        let a: u8 = 0xFF;
+        let (value, overflow) = a.overflowing_add(1);
+        assert_eq!(value, 0x00);
+        assert_eq!(overflow, true);
     }
 }
